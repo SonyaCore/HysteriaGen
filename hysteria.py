@@ -11,7 +11,6 @@ import sys
 import subprocess
 import socket
 import time
-import base64
 import json
 import random
 import csv
@@ -23,7 +22,7 @@ from urllib.error import HTTPError , URLError
 
 # Name
 NAME = "HysteriaGen"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 # Docker Compose Version
 DOCKERCOMPOSEVERSION = "2.14.2"
@@ -33,6 +32,9 @@ DOCKERCOMPOSE = "docker-compose.yml"
 SELFSIGEND_CERT = "cert.crt"
 SELFSIGEND_KEY = "private.key"
 
+MIN_PORT = 0
+MAX_PORT = 65535
+
 class Color:
     """
     stdout color
@@ -41,7 +43,33 @@ class Color:
     Red = "\u001b[31m"
     Yellow = "\u001b[33m"
     Blue = "\u001b[34m"
+    Cyan = "\u001b[36m"
     Reset = "\u001b[0m"
+
+
+def banner(t=0.0010):
+    banner = """
+{cyan}   _   _           _            _       _____            {reset}
+{cyan}  | | | |         | |          (_)     |  __ \           {reset}
+{blue}  | |_| |_   _ ___| |_ ___ _ __ _  __ _| |  \/ ___ _ __  {reset}
+{blue}  |  _  | | | / __| __/ _ \ '__| |/ _` | | __ / _ \ '_ \ {reset}
+{red}  | | | | |_| \__ \ ||  __/ |  | | (_| | |_\ \  __/ | | |{reset}
+{red}  \_| |_/\__, |___/\__\___|_|  |_|\__,_|\____/\___|_| |_|{reset}
+{yellow}          __/ |                                          {reset}
+{yellow}         |___/                                           {reset}
+
+    """.format(
+    green = Color.Green ,
+    reset = Color.Reset,
+    blue = Color.Blue,
+    red =  Color.Red,
+    yellow = Color.Yellow,
+    cyan = Color.Cyan
+    )
+    for char in banner:
+        sys.stdout.write(char)
+        time.sleep(t)
+    sys.stdout.write("\n")
 
 def get_distro() -> str:
     """
@@ -81,19 +109,21 @@ def IP():
     if there are multiple interfaces with private IP the public IP will be used for the config
     """
     try:
-        url = "https://api64.ipify.org"
-        httprequest = Request(url)
+        url = "http://ip-api.com/json/?fields=query"
+        httprequest = Request(url, headers={"Accept": "application/json"})
 
         with urlopen(httprequest) as response:
-            data = response.read().decode()
-            return data
+            data = json.loads(response.read().decode())
+            return data["query"]
     except HTTPError:
         print(
             Color.Red
-            + 'failed to send request to {} please check your connection'.format(url)
+            + f'failed to send request to {url.split("/json")[0]} please check your connection'
             + Color.Reset
         )
         sys.exit(1)
+
+ServerIP = IP()
 
 def port_is_use(port):
     """
@@ -111,22 +141,6 @@ def port_is_use(port):
         stream.close()
     return state
 
-def qrcode(data, width=76, height=76) -> str:
-    qrcode = Request(
-        "https://qrcode.show/{}".format(data),
-        headers={
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/octet-stream",
-            "X-QR-Version-Type": "micro",
-            "X-QR-Quiet-Zone": "true",
-            "X-QR-Min-Width": width,
-            "X-QR-Min-Height": height,
-        },
-    )
-
-    with urlopen(qrcode) as response:
-        return response.read().decode()
-
 def run_docker():
     """
     Start xray docker-compose.
@@ -141,12 +155,12 @@ def run_docker():
         else:
             # Install docker if docker are not installed
             try:
-                print(yellow + "Docker Not Found.\nInstalling Docker ...")
+                print(Color.Yellow + "Docker Not Found.\nInstalling Docker ...")
                 subprocess.run(
                     "curl https://get.docker.com | sh", shell=True, check=True
                 )
             except subprocess.CalledProcessError:
-                sys.exit(error + "Download Failed !" + reset)
+                sys.exit(Color.Red + "Download Failed !" + Color.Reset)
 
         # Check if Docker Service are Enabled
         systemctl = subprocess.call(["systemctl", "is-active", "--quiet", "docker"])
@@ -216,6 +230,7 @@ def create_key():
 
 
 def certificate():
+    global cert , private , domain_name , insecure
 
     user_input = ''
 
@@ -238,24 +253,33 @@ def certificate():
     select = options[int(user_input) - 1]
     if select == options[0] :
         create_key()
+        cert = SELFSIGEND_CERT
+        private = SELFSIGEND_KEY
+        insecure = "true"
+        domain_name = "www.bing.com"
 
     elif select == options[1]:
         subprocess.run("curl https://get.acme.sh | sh" , shell=True , check= True)
+        insecure = "false"
 
     elif select == options[2] :
         cert_path = input("Enter the path of the public key file crt (/etc/key/cert.crt) : ")
+        
         if os.path.exists(cert_path):
             print(Color.Blue + "CRT FILE : " + cert_path + Color.Reset)
+        
         else:
             print(Color.Red + "Invalid Path" + Color.Reset)
             return certificate()
+        
         key_path = input("Enter the path of the key file (/etc/key/private.key) : ")
+
         if os.path.exists(key_path):
             print(Color.Blue + "Key FILE : " + key_path + Color.Reset)
         else:
             print(Color.Red + "Invalid Path" + Color.Reset)
             return certificate()
-        
+
         cert = cert_path
         private = key_path
 
@@ -297,6 +321,12 @@ def hysteria_template():
     https://hub.docker.com/r/shadowsocks/shadowsocks-libev
     """
 
+    docker_certkey = "- ./{}:/etc/hysteria/{}:ro"\
+    .format(SELFSIGEND_CERT,SELFSIGEND_CERT)
+
+    docker_hostkey = "- ./{}:/etc/hysteria/{}:ro"\
+        .format(SELFSIGEND_KEY,SELFSIGEND_KEY)
+
     data = """version: '3.9'
 services:
   hysteria:
@@ -306,7 +336,9 @@ services:
     network_mode: "host"
     volumes:
       - ./hysteria.json:/etc/hysteria.json
-    command: ["server", "--config", "/etc/hysteria.json"]"""
+      %s
+      %s
+    command: ["server", "--config", "/etc/hysteria.json"]""" % (docker_certkey , docker_hostkey)
 
     print(Color.Blue + "Created Hysteria {} configuration".format(DOCKERCOMPOSE) + Color.Reset)
     with open(DOCKERCOMPOSE, "w") as txt:
@@ -323,44 +355,144 @@ def generate_password():
 
     return hash_object.hexdigest()[:6]
 
+def random_port(min : int = 2000 ,max : int = MAX_PORT) -> int:
+    return random.randint(min,max)
+
+def port():
+    global user_port
+
+    try:
+        user_port = input("Set hysteria port [1-65535] (Press Enter for a random port between 2000-65535): ")
+        if len(user_port) == 0:
+                user_port = random_port()
+        
+        user_port = int(user_port)
+
+        if user_port < MIN_PORT :
+            print(Color.Red + "PORT Can't be below 0" + Color.Reset)
+            return port()
+        
+        if user_port > MAX_PORT :
+            print(Color.Red + "PORT can't be more than" + str(MAX_PORT) + Color.Reset)
+            return port()
+
+        if port_is_use(user_port):
+            print(Color.Red + 'PORT is already being used' + Color.Reset)
+
+
+        print(Color.Blue + "Hysteria PORT : " + str(user_port) + Color.Reset)
+    except ValueError:
+        print(Color.Red + "PORT must be a integer value" + Color.Reset)
+        return port()
+
 def password():
-    password_input = input("Set the hysteria authentication password, Press enter for random password : ")
-    if password_input == "":
-        password_input = generate_password()
-    elif len(password_input) < 6 :
+    global user_password
+
+    user_password = input("Set the hysteria authentication password, Press enter for random password : ")
+    if user_password == "":
+        user_password = generate_password()
+    elif len(user_password) < 6 :
         print(Color.Yellow + "\nPassword must be more than 6 characters! Please re-enter" + Color.Reset)
         return password()
 
-    print(Color.Blue + "Authentication Password confirmed: {}\n".format(password_input) + Color.Reset)
+    print(Color.Blue + "Authentication Password confirmed: {}\n".format(user_password) + Color.Reset)
 
 def hysteria_config():
-    v4 = IP()
+    ref = 46
     config_name = 'hysteria.json'
     
     data = """
     {
-    "listen": ":{port}",
-    "protocol": "${hysteria_protocol}",
-    "resolve_preference": "${rpip}",
+    "listen": ":%s",
+    "protocol": "%s",
+    "resolve_preference": "%s",
     "auth": {
     "mode": "password",
     "config": {
-    "password": "${pswd}"
+    "password": "%s"
     }
     },
     "alpn": "h3",
-    "cert": "${certificatec}",
-    "key": "${certificatep}"
-    }"""
+    "cert": "/etc/hysteria/%s",
+    "key": "/etc/hysteria/%s"
+    }""" % (user_port,hysteria_protocol,ref,user_password,cert,private)
 
     with open(config_name,'w') as config :
         config.write(data)
         config.close()
 
-# print(get_distro())
-# kernel_check()
-# print(IP())
-# certificate()
-protocol()
-hysteria_template()
-password()
+def client_config():
+    config_name = 'client.json'
+    data = """
+{
+"server": "%s:%s",
+"protocol": "%s",
+"up_mbps": 20,
+"down_mbps": 100,
+"alpn": "h3",
+"http": {
+"listen": "127.0.0.1:10809",
+"timeout" : 300,
+"disable_udp": false
+},
+"socks5": {
+"listen": "127.0.0.1:10808",
+"timeout": 300,
+"disable_udp": false
+},
+"auth_str": "%s",
+"server_name": "%s",
+"insecure": %s,
+"retry": 3,
+"retry_interval": 3,
+"fast_open": true,
+"hop_interval": 60
+}""" % (ServerIP,user_port,hysteria_protocol,user_password,domain_name,insecure)
+    with open(config_name,'w') as file:
+        file.write(json.dumps(data,indent=2))
+        
+        print(Color.Blue + 'Client Configuragtion Created !' + Color.Reset)
+        print(Color.Blue +
+        "Use below configuration with hysteria or import it to your client " +
+        Color.Reset)
+        
+        print(data)
+
+def hysteria_url(linkname):
+    url = "hysteria://{}:{}?protocol={}&auth={}&peer={}&insecure={}&upmbps=10&downmbps=50&alpn=h3#{}"\
+    .format(IP(),user_port,hysteria_protocol,user_password,domain_name,insecure,linkname)
+
+    return(url)
+
+def qrcode(data, width=76, height=76) -> str:
+    qrcode = Request(
+        "https://qrcode.show/{}".format(data),
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/octet-stream",
+            "X-QR-Version-Type": "micro",
+            "X-QR-Quiet-Zone": "true",
+            "X-QR-Min-Width": width,
+            "X-QR-Min-Height": height,
+        },
+    )
+
+    with urlopen(qrcode) as response:
+        return response.read().decode()
+
+if __name__ == "__main__":
+    banner()
+    print(Color.Green + 'Creating Hysteria ..' + Color.Reset)
+    print(Color.Green + "Distro : " + get_distro() + Color.Reset)
+    print(Color.Green + "Kernel : " + Color.Reset + kernel_check())
+    print(Color.Green + "IP : " + ServerIP + Color.Reset)
+    certificate()
+    protocol()
+    port()
+    password()
+    hysteria_config()
+    hysteria_template()
+    run_docker()
+    client_config()
+    print(hysteria_url('mikasa'))
+    print(qrcode(hysteria_url('mikasa')))
