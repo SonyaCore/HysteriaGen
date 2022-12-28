@@ -15,7 +15,7 @@ HysteriaGen helps you to deploy your Hysteria VPN with docker.
 
 ## **How it Works ?**
 
-HysteriaGen uses docker-compose to pull hysteria docker image and running it with created configuration file
+`HysteriaGen` uses docker-compose to pull hysteria docker image and running it with created configuration file
 
 After deploying it gave you client configuration & URL and QRCode to use that with your device
 
@@ -59,7 +59,7 @@ IP : ###
 
 Use option 1 to deploy hysteria on docker
 
-In option 1 you have several choices
+In option [1] you have several choices
 
 > `Self-signed` certificate for using hysteria without a domain
 
@@ -81,7 +81,7 @@ There are several protcols you can choice from
 
 `faketcp` mode that allows servers and clients to communicate using a protocol that looks like TCP but does not actually go through the system TCP stack. This tricks whatever middleboxes into thinking it’s actually TCP traffic, rendering UDP-specific restrictions useless. (only works on linux and require root privileges)
 
-after specifying the protocol you have to set an authentication password for a password which will prompt you, pressing enter will generate a 6-character random password
+After specifying the protocol you have to set an authentication password for a password which will prompt you, pressing enter will generate a 6-character random password
 
 ## First time use ?
 
