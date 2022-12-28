@@ -19,9 +19,15 @@ HysteriaGen uses docker-compose to pull hysteria docker image and running it wit
 
 After deploying it gave you client configuration & URL and QRCode to use that with your device
 
+## **Requirements**
+
+For Running `HysteriaGen` you only need to have python3 on you server
+
+`Docker` will automatically installed of it's not exist in your server
+
 ## Usage
 
-Running Program :
+**Running Program :**
 
 ```bash
 curl https://raw.githubusercontent.com/SonyaCore/HysteriaGen/main/hysteria.py -o /tmp/hysteria.py && python3 /tmp/hysteria.py
@@ -71,7 +77,7 @@ There are several protcols you can choice from
 
 > Users in China often report that their ISPs block/restrict persistent UDP connections to a single port. Port hopping should invalidate this kind of mechanism.
 
-`Wechat-video` obfuscation feature ( highly recommended in Iran )
+`Wechat-video` obfuscation feature ( highly recommended in `Iran` )
 
 `faketcp` mode that allows servers and clients to communicate using a protocol that looks like TCP but does not actually go through the system TCP stack. This tricks whatever middleboxes into thinking it’s actually TCP traffic, rendering UDP-specific restrictions useless. (only works on linux and require root privileges)
 
