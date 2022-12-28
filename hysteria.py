@@ -23,7 +23,7 @@ from urllib.error import HTTPError , URLError
 
 # Name
 NAME = "HysteriaGen"
-VERSION = "0.3.0"
+VERSION = "0.3.2"
 
 # Docker Compose Version
 DOCKERCOMPOSEVERSION = "2.14.2"
@@ -160,51 +160,60 @@ def validate_domain(domain):
         print("Please enter a valid domain name")
         raise TypeError
 
-def run_docker():
+class Docker():
     """
-    Start hysteria docker-compose.
-    at first, it will check if docker exists and then check if docker-compose exists
+    main docker module.
+    this module check for docker status & docker binary file in /usr/bin/docker
     if docker is not in the path it will install docker with the official script.
     then it checks the docker-compose path if the condition is True docker-compose.yml will be used for running hysteria.
     """
-    try:
-        # Check if docker exist
-        if os.path.exists("/usr/bin/docker") or os.path.exists("/usr/local/bin/docker"):
-            pass
-        else:
-            # Install docker if docker are not installed
-            try:
+   
+    def __init__(self) -> None:
+        self.dockercompose = DOCKERCOMPOSE
+        self.dockercompose_version = DOCKERCOMPOSEVERSION
+
+    def check_docker(self):
+        """
+        check docker installation file
+        """
+        try:
+            if os.path.exists("/usr/bin/docker") or os.path.exists("/usr/local/bin/docker"):
+                pass
+            else:
+                # Install docker if docker are not installed
                 print(Color.Yellow + "Docker Not Found.\nInstalling Docker ...")
                 subprocess.run(
-                    "curl https://get.docker.com | sh", shell=True, check=True
+                "curl https://get.docker.com | sh", shell=True, check=True
                 )
-            except subprocess.CalledProcessError:
-                sys.exit(Color.Red + "Download Failed !" + Color.Reset)
+        except subprocess.CalledProcessError:
+            sys.exit(Color.Red + "Download Failed !" + Color.Reset)
 
-        # Check if Docker Service are Enabled
+    def docker_service(self):
+        """
+        Check docker service status 
+        """
         systemctl = subprocess.call(["systemctl", "is-active", "--quiet", "docker"])
         if systemctl == 0:
             pass
         else:
             subprocess.call(["systemctl", "enable", "--now", "--quiet", "docker"])
-
-        time.sleep(2)
-
-        # Check if docker-compose exist
+  
+    def check_docker_compose(self):
+        """
+        check docker installation file
+        """
         if os.path.exists("/usr/bin/docker-compose") or os.path.exists(
             "/usr/local/bin/docker-compose"
         ):
-            subprocess.run(
-                f"docker-compose -f {DOCKERCOMPOSE} up -d", shell=True, check=True
-            )
-            reset_docker_compose()
+            self.run_docker_compose()
+            self.reset_docker_compose()
         else:
             print(
                 Color.Yellow
-                + f"docker-compose Not Found.\nInstalling docker-compose v{DOCKERCOMPOSEVERSION} ..."
+                + f"docker-compose Not Found.\nInstalling docker-compose v{self.dockercompose_version} ..."
             )
             subprocess.run(
-                f"curl -SL https://github.com/docker/compose/releases/download/v{DOCKERCOMPOSEVERSION}/docker-compose-linux-x86_64 \
+                f"curl -SL https://github.com/docker/compose/releases/download/v{self.dockercompose_version}/docker-compose-linux-x86_64 \
         -o /usr/local/bin/docker-compose",
                 shell=True,
                 check=True,
@@ -218,17 +227,20 @@ def run_docker():
                 check=True,
             )
 
-            subprocess.run(
-                f"docker-compose -f {DOCKERCOMPOSE} up -d", shell=True, check=True
-            )
-    except subprocess.CalledProcessError as e:
-        sys.exit(Color.Red + str(e) + Color.Reset)
-    except PermissionError:
-        sys.exit(Color.Red + "ًroot privileges required" + Color.Reset)
+    def run_docker_compose(self):
+        subprocess.run(
+            f"docker-compose -f {self.dockercompose} up -d", shell=True, check=True
+        )      
+
+    def reset_docker_compose(self):
+        subprocess.run(f"docker-compose restart", shell=True, check=True)
 
 
-def reset_docker_compose():
-    subprocess.run(f"docker-compose restart", shell=True, check=True)
+def run_docker() -> None:
+    docker = Docker()
+    docker.check_docker()
+    docker.docker_service()
+    docker.check_docker_compose()
 
 
 def create_key():
@@ -587,10 +599,10 @@ def menu():
             print(Color.Red + "="*100 + Color.Reset)
             client_config()
             print(Color.Yellow + "Use below url for your client : " + Color.Reset) 
-            print(hysteria_url('mikasa'))
+            print(hysteria_url('hysteria'))
             print(Color.Red + "="*100 + Color.Reset)
             print(Color.Yellow + "QRCode : " + Color.Reset)
-            print(qrcode(hysteria_url('mikasa')))
+            print(qrcode(hysteria_url('hysteria')))
             break
         else :
             print(Color.Red + "Invalid Option." + Color.Reset)
