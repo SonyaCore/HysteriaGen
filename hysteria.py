@@ -15,14 +15,15 @@ import json
 import random
 import csv
 import hashlib
-
+import signal
+import re
 
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError , URLError
 
 # Name
 NAME = "HysteriaGen"
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 # Docker Compose Version
 DOCKERCOMPOSEVERSION = "2.14.2"
@@ -45,6 +46,14 @@ class Color:
     Blue = "\u001b[34m"
     Cyan = "\u001b[36m"
     Reset = "\u001b[0m"
+
+
+def signal_handler(sig, frame):
+    print(Color.Red + "\nKeyboardInterrupt!")
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
 
 
 def banner(t=0.0010):
@@ -91,9 +100,11 @@ def install_dependency():
     os = get_distro()
     packages = "lsof curl iptables-persistent"
     if os in ("Ubuntu","Debian GNU/Linux"):
-        subprocess.run('apt install -y {}'.format(packages))
+        subprocess.run('apt install -y {}'.format(packages)
+        ,shell= True ,check= True)
     elif os in ("CentOS Linux","Fedora"):
-        subprocess.run('yum -y {}'.format(packages))
+        subprocess.run('yum -y {}'.format(packages)
+        ,shell= True , check= True )
 
 def kernel_check() -> str:
     os_version = subprocess.run('uname -s -r -p',
@@ -141,12 +152,20 @@ def port_is_use(port):
         stream.close()
     return state
 
+def validate_domain(domain):
+    regex = r"^(((?!\-))(xn\-\-)?[a-z0-9\-_]{0,61}[a-z0-9]{1,1}\.)*(xn\-\-)?([a-z0-9\-]{1,61}|[a-z0-9\-]{1,30})\.[a-z]{2,}$"
+    if re.fullmatch(regex, domain):
+        pass
+    else:
+        print("Please enter a valid domain name")
+        raise TypeError
+
 def run_docker():
     """
-    Start xray docker-compose.
+    Start hysteria docker-compose.
     at first, it will check if docker exists and then check if docker-compose exists
     if docker is not in the path it will install docker with the official script.
-    then it checks the docker-compose path if the condition is True docker-compose.yml will be used for running xray.
+    then it checks the docker-compose path if the condition is True docker-compose.yml will be used for running hysteria.
     """
     try:
         # Check if docker exist
@@ -237,7 +256,6 @@ def certificate():
     input_message = "Select an option:\n"
 
     options = ['www.bing.com self-signed certificate',
-    'Acme one-click certificate application script (supports regular port 80 mode and dns api mode)',
     'Custom certificate path\n']
 
     for index, item in enumerate(options):
@@ -258,11 +276,7 @@ def certificate():
         insecure = "true"
         domain_name = "www.bing.com"
 
-    elif select == options[1]:
-        subprocess.run("curl https://get.acme.sh | sh" , shell=True , check= True)
-        insecure = "false"
-
-    elif select == options[2] :
+    elif select == options[1] :
         cert_path = input("Enter the path of the public key file crt (/etc/key/cert.crt) : ")
         
         if os.path.exists(cert_path):
@@ -283,9 +297,44 @@ def certificate():
         cert = cert_path
         private = key_path
 
-        domain_name = input("Please enter the resolved domain name:")
+        domain_name = input("Enter the resolved domain name:")
+        try:
+            validate_domain(domain_name)
+        except TypeError:
+            print(Color.Red + 'Invalid Domain Name !\n' + Color.Reset)
+            return certificate()
+
+        insecure = "false"
         print(Color.Blue + "Resolved domain name: {} ".format(domain_name) + Color.Reset)
+
+def port_hopping():
+    global firstudpport , endudpport
+
+    fudpmsg = "\nAdd a START port for the range (recommended between 10000-65535) : "
+    eudpmsg = "\nAdd an END port for the range , should be greater than the starting port) : "
     
+    try :
+        firstudpport = int(input(fudpmsg))
+        endudpport = int(input(eudpmsg))
+    except ValueError :
+        print(Color.Red + "PORT must be a integer value" + Color.Reset)
+        return port_hopping()
+
+    if firstudpport >= endudpport:
+      while firstudpport > endudpport:
+        if firstudpport >= endudpport:
+          print(Color.Yellow +
+          "\nStarting port is less than ending port. Please re-enter starting/ending ports"
+          + Color.Reset)
+          return port_hopping()
+
+    subprocess.call(["iptables", "-t", "nat", "-A", "PREROUTING",
+     "-p", "udp", "--dport", str(firstudpport) + ":" + str(endudpport), "-j", "DNAT", "--to-destination", ":" + str(user_port)])
+    subprocess.call(["ip6tables", "-t", "nat", "-A", "PREROUTING",
+     "-p", "udp", "--dport", str(firstudpport) + ":" + str(endudpport), "-j", "DNAT", "--to-destination", ":" + str(user_port)])
+    # subprocess.call(["netfilter-persistent", "save"])
+    print("\nConfirmed range of forwarded ports: " + str(firstudpport) + " to " + str(endudpport) + "\n")
+
 def protocol():
     global hysteria_protocol
     user_input = ''
@@ -293,9 +342,9 @@ def protocol():
     input_message = (Color.Green + "Select transport protocol for hysteria:\n" + Color.Reset)
     
     options = [
-    "UDP (support range port hopping function, press Enter to default)",
-    "Wechat-Video",
-    "FakeTcp (only supports linux or Android client and requires root privileges)"]
+    "UDP (support range port hopping function)",
+    "Wechat-Video , recommended",
+    "FakeTcp (only supports on linux requires root privileges)"]
 
     for index, item in enumerate(options):
         input_message += f'{index+1}) {item}\n'
@@ -303,24 +352,23 @@ def protocol():
     while user_input not in map(str, range(1, len(options) + 1)):
         user_input = input(input_message)
 
+    
     select = options[int(user_input) - 1]
 
     if select == options[0] :
         hysteria_protocol = "udp"
+        port_hopping()
+
     elif select == options[1] :
         hysteria_protocol = "wechat-video"
-    elif select == options[0] :
+
+    elif select == options[2] :
         hysteria_protocol = "faketcp"
+
     print(Color.Blue + "Transport Protocol : {}".format(hysteria_protocol) + Color.Reset)
 
 
 def hysteria_template():
-    """
-    Create ShadowSocks docker-compose file for shadowsocks-libev.
-    in this docker-compose shadowsocks-libev is being used for running shadowsocks in the container.
-    https://hub.docker.com/r/shadowsocks/shadowsocks-libev
-    """
-
     docker_certkey = "- ./{}:/etc/hysteria/{}:ro"\
     .format(SELFSIGEND_CERT,SELFSIGEND_CERT)
 
@@ -331,7 +379,6 @@ def hysteria_template():
 services:
   hysteria:
     image: tobyxdd/hysteria
-    container_name: hysteria
     restart: always
     network_mode: "host"
     volumes:
@@ -378,9 +425,11 @@ def port():
 
         if port_is_use(user_port):
             print(Color.Red + 'PORT is already being used' + Color.Reset)
+            return port()
 
 
         print(Color.Blue + "Hysteria PORT : " + str(user_port) + Color.Reset)
+
     except ValueError:
         print(Color.Red + "PORT must be a integer value" + Color.Reset)
         return port()
@@ -388,16 +437,25 @@ def port():
 def password():
     global user_password
 
-    user_password = input("Set the hysteria authentication password, Press enter for random password : ")
+    user_password = input("Set the hysteria authentication password, Press enter for a random password : ")
     if user_password == "":
         user_password = generate_password()
     elif len(user_password) < 6 :
         print(Color.Yellow + "\nPassword must be more than 6 characters! Please re-enter" + Color.Reset)
         return password()
 
-    print(Color.Blue + "Authentication Password confirmed: {}\n".format(user_password) + Color.Reset)
+    print(Color.Blue + "Authentication password confirmed: {}\n"\
+    .format(Color.Yellow + user_password + Color.Reset) + Color.Reset)
 
 def hysteria_config():
+
+    config_port = user_port
+    if hysteria_protocol == "udp":
+        config_port = "{},{}-{}".format(user_port,firstudpport,endudpport)
+    else :
+        config_port = user_port
+
+    # IPv4 
     ref = 46
     config_name = 'hysteria.json'
     
@@ -415,11 +473,10 @@ def hysteria_config():
     "alpn": "h3",
     "cert": "/etc/hysteria/%s",
     "key": "/etc/hysteria/%s"
-    }""" % (user_port,hysteria_protocol,ref,user_password,cert,private)
-
+    }""" % (config_port,hysteria_protocol,ref,user_password,cert,private)
+    
     with open(config_name,'w') as config :
-        config.write(data)
-        config.close()
+        config.write(json.dumps(json.loads(data),indent=2))
 
 def client_config():
     config_name = 'client.json'
@@ -448,19 +505,24 @@ def client_config():
 "fast_open": true,
 "hop_interval": 60
 }""" % (ServerIP,user_port,hysteria_protocol,user_password,domain_name,insecure)
-    with open(config_name,'w') as file:
-        file.write(json.dumps(data,indent=2))
+
+    with open(config_name,'w') as clientconfig :
+        clientconfig.write(json.dumps(json.loads(data),indent=2))
         
-        print(Color.Blue + 'Client Configuragtion Created !' + Color.Reset)
-        print(Color.Blue +
-        "Use below configuration with hysteria or import it to your client " +
+        print(Color.Blue + 'Client Configuration Created !' + Color.Reset)
+        print(Color.Yellow +
+        "Use the below configuration on the hysteria client " +
         Color.Reset)
         
-        print(data)
+        for char in data:
+            sys.stdout.write(char)
+            time.sleep(0.005)
+        sys.stdout.write("\n")
+        print('\n')
 
 def hysteria_url(linkname):
     url = "hysteria://{}:{}?protocol={}&auth={}&peer={}&insecure={}&upmbps=10&downmbps=50&alpn=h3#{}"\
-    .format(IP(),user_port,hysteria_protocol,user_password,domain_name,insecure,linkname)
+    .format(ServerIP,user_port,hysteria_protocol,user_password,domain_name,insecure,linkname)
 
     return(url)
 
@@ -480,19 +542,60 @@ def qrcode(data, width=76, height=76) -> str:
     with urlopen(qrcode) as response:
         return response.read().decode()
 
-if __name__ == "__main__":
-    banner()
-    print(Color.Green + 'Creating Hysteria ..' + Color.Reset)
-    print(Color.Green + "Distro : " + get_distro() + Color.Reset)
+def shell():
+    try :
+        shellcmd = Color.Green + "# : " + Color.Reset
+        option = int(input(shellcmd))
+        return option
+    except ValueError :
+        print(Color.Red + "Invalid Option." + Color.Reset)
+        return shell()
+
+def server_information() -> str:
+    print(Color.Green + "Server Information : " + Color.Reset )
+    print(Color.Green + "Distro : " + Color.Reset + get_distro() )
     print(Color.Green + "Kernel : " + Color.Reset + kernel_check())
-    print(Color.Green + "IP : " + ServerIP + Color.Reset)
-    certificate()
-    protocol()
-    port()
-    password()
-    hysteria_config()
-    hysteria_template()
-    run_docker()
-    client_config()
-    print(hysteria_url('mikasa'))
-    print(qrcode(hysteria_url('mikasa')))
+    print(Color.Green + "IP : " +  Color.Reset + ServerIP)
+
+def menu_option() -> str :
+    print("[1] Deploying Hysteria using docker-compose")
+    print("[0] Exit the program")
+
+def menu():
+    banner()
+    print(Color.Blue + NAME + " " + VERSION + Color.Reset)
+    print("~"*100)
+    server_information()
+    print("~"*100)
+
+    print(Color.Green + "="*100 + Color.Reset)
+    menu_option()
+    print(Color.Green + "="*100 + Color.Reset)
+    
+    option = shell()
+    
+    while option != 0 :
+        if option == 1 :
+            print(Color.Green + 'Deploying Hysteria ' + Color.Reset)
+            certificate()
+            port()
+            protocol()
+            password()
+            hysteria_config()
+            hysteria_template()
+            run_docker()
+            print(Color.Red + "="*100 + Color.Reset)
+            client_config()
+            print(Color.Yellow + "Use below url for your client : " + Color.Reset) 
+            print(hysteria_url('mikasa'))
+            print(Color.Red + "="*100 + Color.Reset)
+            print(Color.Yellow + "QRCode : " + Color.Reset)
+            print(qrcode(hysteria_url('mikasa')))
+            break
+        else :
+            print(Color.Red + "Invalid Option." + Color.Reset)
+            
+        option = shell()
+
+if __name__ == "__main__":
+    menu()
