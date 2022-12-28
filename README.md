@@ -51,8 +51,9 @@ IP : ###
 ==============================================
 ```
 
-use option 1 to deploy hysteria on docker
-in option 1 you have several choices
+Use option 1 to deploy hysteria on docker
+
+In option 1 you have several choices
 
 > `Self-signed` certificate for using hysteria without a domain
 
@@ -60,7 +61,7 @@ in option 1 you have several choices
 
 ### Transport protocols
 
-there are several protcols you can choice from
+There are several protcols you can choice from
 
 1. UDP
 2. Wechat-Video
@@ -113,5 +114,5 @@ Licensed under the [GPL-3][license] license.
 [issues-url]: https://github.com/SonyaCore/HysteriaGen/issues
 [telegram-shield]: https://img.shields.io/badge/Telegram-blue.svg?style=flat&logo=telegram
 [telegram-url]: https://t.me/ReiNotes
-[license]: LICENCE
+[license]: LICENSE
 [version]: https://img.shields.io/badge/Version-0.3.0-blue
