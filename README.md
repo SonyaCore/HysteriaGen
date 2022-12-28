@@ -83,6 +83,11 @@ There are several protcols you can choice from
 
 After specifying the protocol you have to set an authentication password for a password which will prompt you, pressing enter will generate a 6-character random password
 
+After specifying the protocol you have to set an authentication method :
+
+1. `OBFS`: generating a 32-character random and using OBFS for obfuscating
+2. `STRING` : prompt you for password, pressing enter will generate a 6-character random password
+
 ## First time use ?
 
 Coming Soon

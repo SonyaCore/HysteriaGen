@@ -16,6 +16,7 @@ import random
 import csv
 import hashlib
 import signal
+import string
 import re
 
 from urllib.request import urlopen, Request
@@ -23,7 +24,7 @@ from urllib.error import HTTPError , URLError
 
 # Name
 NAME = "HysteriaGen"
-VERSION = "0.3.4"
+VERSION = "0.3.5"
 
 # Docker Compose Version
 DOCKERCOMPOSEVERSION = "2.14.2"
@@ -65,6 +66,7 @@ class Hysteria():
     PORT : int = None
     PROTOCOL : str = None
     PASSWORD : str = None
+    AUTH_TYPE : str = None
 #####################################
 
 
@@ -431,6 +433,11 @@ def generate_password() -> str:
 
     return hash_object.hexdigest()[:6]
 
+def random_password(len : int = 32) -> str:
+    "Generate random password"
+    randomstring = ''.join(random.choices(string.ascii_letters + string.digits, k = len))
+    return str(randomstring)
+
 def random_port(min : int = 2000 ,max : int = MAX_PORT) -> int:
     return random.randint(min,max)
 
@@ -462,15 +469,37 @@ def port():
 
 def password():
 
-    Hysteria.PASSWORD = input("Set the hysteria authentication password, Press enter for a random password : ")
-    if Hysteria.PASSWORD == "":
-        Hysteria.PASSWORD = generate_password()
-    elif len(Hysteria.PASSWORD) < 6 :
-        print(Color.Yellow + "\nPassword must be more than 6 characters! Please re-enter" + Color.Reset)
-        return password()
+    user_input = ''
 
-    print(Color.Blue + "Authentication password confirmed: {}\n"\
-    .format(Color.Yellow + Hysteria.PASSWORD + Color.Reset) + Color.Reset)
+    input_message = (Color.Green + "Select Authentication Type :\n" + Color.Reset)
+    
+    options = ["OBFS","STRING"]
+
+    for index, item in enumerate(options):
+        input_message += f'{index+1}) {item}\n'
+
+    while user_input not in map(str, range(1, len(options) + 1)):
+        user_input = input(input_message)
+
+    select = options[int(user_input) - 1]
+
+    if select == options[0] :
+        Hysteria.AUTH_TYPE = "OBFS"
+        Hysteria.PASSWORD = random_password()
+        print(Color.Blue + "OBFS password confirmed: {}\n"\
+        .format(Color.Yellow + Hysteria.PASSWORD + Color.Reset) + Color.Reset)    
+
+    elif select == options[1] :
+        Hysteria.AUTH_TYPE = "STRING"
+        Hysteria.PASSWORD = input("Set the hysteria authentication password, Press enter for a random password : ")
+        if Hysteria.PASSWORD == "":
+            Hysteria.PASSWORD = generate_password()
+        elif len(Hysteria.PASSWORD) < 6 :
+            print(Color.Yellow + "\nPassword must be more than 6 characters! Please re-enter" + Color.Reset)
+            return password()
+
+        print(Color.Blue + "Authentication password confirmed: {}\n"\
+        .format(Color.Yellow + Hysteria.PASSWORD + Color.Reset) + Color.Reset)
 
 def hysteria_config():
 
@@ -479,7 +508,18 @@ def hysteria_config():
         config_port = "{},{}-{}".format(Hysteria.PORT,firstudpport,endudpport)
     else :
         config_port = Hysteria.PORT
+    
+    if Hysteria.AUTH_TYPE == "STRING" :
+        auth = """
+        "auth": {
+        "mode": "password",
+        "config": {
+        "password": "%s"
+        }
+        }""" % (Hysteria.PASSWORD)
 
+    elif Hysteria.AUTH_TYPE == "OBFS" :
+        auth = """ "obfs": "%s" """ %(Hysteria.PASSWORD)
     # IPv4 
     ref = 46
     config_name = 'hysteria.json'
@@ -489,19 +529,14 @@ def hysteria_config():
     "listen": ":%s",
     "protocol": "%s",
     "resolve_preference": "%s",
-    "auth": {
-    "mode": "password",
-    "config": {
-    "password": "%s"
-    }
-    },
+    %s,
     "alpn": "h3",
     "cert": "/etc/hysteria/%s",
     "key": "/etc/hysteria/%s"
     }""" % (config_port,
     Hysteria.PROTOCOL,
     ref,
-    Hysteria.PASSWORD,
+    auth,
     Hysteria.CERT,
     Hysteria.PRIVATE)
     
@@ -510,6 +545,16 @@ def hysteria_config():
 
 def client_config():
     config_name = 'client.json'
+
+    if Hysteria.AUTH_TYPE == "STRING":
+        auth = """ 
+        "auth_str": "%s"
+        """ %(Hysteria.PASSWORD)
+    elif Hysteria.AUTH_TYPE == "OBFS":
+        auth = """
+        "obfs": "%s"
+        """ %(Hysteria.PASSWORD)
+
     data = """
 {
 "server": "%s:%s",
@@ -527,7 +572,7 @@ def client_config():
 "timeout": 300,
 "disable_udp": false
 },
-"auth_str": "%s",
+%s,
 "server_name": "%s",
 "insecure": %s,
 "retry": 3,
@@ -537,7 +582,7 @@ def client_config():
 }""" % (ServerIP,
     Hysteria.PORT,
     Hysteria.PROTOCOL,
-    Hysteria.PASSWORD,
+    auth,
     Hysteria.DOMAIN_NAME,
     Hysteria.INSECURE)
 
@@ -549,19 +594,26 @@ def client_config():
         "Use the below configuration on the hysteria client " +
         Color.Reset)
         
-        for char in data:
+        data = json.dumps(json.loads(data),indent=2)
+        for char in data :
             sys.stdout.write(char)
             time.sleep(0.005)
         sys.stdout.write("\n")
-        print('\n')
 
 def hysteria_url(linkname):
-    url = "hysteria://{}:{}?protocol={}&auth={}&peer={}&insecure={}&upmbps=10&downmbps=50&alpn=h3#{}"\
+    if Hysteria.AUTH_TYPE == "STRING":
+        auth = "auth={}".format(Hysteria.PASSWORD)
+    elif Hysteria.AUTH_TYPE == "OBFS":
+        auth = "obfs=xplus&obfsParam={}".format(Hysteria.PASSWORD)
+
+    Hysteria.INSECURE = 1 if Hysteria.INSECURE == "true" else 0
+
+    url = "hysteria://{}:{}?protocol={}&{}&peer={}&insecure={}&upmbps=10&downmbps=50&alpn=h3#{}"\
     .format(
     ServerIP,
     Hysteria.PORT,
     Hysteria.PROTOCOL,
-    Hysteria.PASSWORD,
+    auth,
     Hysteria.DOMAIN_NAME,
     Hysteria.INSECURE,
     linkname)
