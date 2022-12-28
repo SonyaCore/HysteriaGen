@@ -23,7 +23,7 @@ from urllib.error import HTTPError , URLError
 
 # Name
 NAME = "HysteriaGen"
-VERSION = "0.3.2"
+VERSION = "0.3.4"
 
 # Docker Compose Version
 DOCKERCOMPOSEVERSION = "2.14.2"
@@ -36,6 +36,7 @@ SELFSIGEND_KEY = "private.key"
 MIN_PORT = 0
 MAX_PORT = 65535
 
+#####################################
 class Color:
     """
     stdout color
@@ -46,6 +47,25 @@ class Color:
     Blue = "\u001b[34m"
     Cyan = "\u001b[36m"
     Reset = "\u001b[0m"
+#####################################
+
+
+#####################################
+class Hysteria():
+    """
+    Hysteria Configuration Instance
+    """
+    ## Domain
+    DOMAIN_NAME : str = None
+    INSECURE : str | bool = None
+    ## Certificate
+    CERT : str = None
+    PRIVATE : str = None
+    ## Server Configuration
+    PORT : int = None
+    PROTOCOL : str = None
+    PASSWORD : str = None
+#####################################
 
 
 def signal_handler(sig, frame):
@@ -261,8 +281,6 @@ def create_key():
 
 
 def certificate():
-    global cert , private , domain_name , insecure
-
     user_input = ''
 
     input_message = "Select an option:\n"
@@ -283,10 +301,10 @@ def certificate():
     select = options[int(user_input) - 1]
     if select == options[0] :
         create_key()
-        cert = SELFSIGEND_CERT
-        private = SELFSIGEND_KEY
-        insecure = "true"
-        domain_name = "www.bing.com"
+        Hysteria.CERT = SELFSIGEND_CERT
+        Hysteria.PRIVATE = SELFSIGEND_KEY
+        Hysteria.INSECURE = "true"
+        Hysteria.DOMAIN_NAME = "www.bing.com"
 
     elif select == options[1] :
         cert_path = input("Enter the path of the public key file crt (/etc/key/cert.crt) : ")
@@ -306,18 +324,18 @@ def certificate():
             print(Color.Red + "Invalid Path" + Color.Reset)
             return certificate()
 
-        cert = cert_path
-        private = key_path
+        Hysteria.CERT = cert_path
+        Hysteria.PRIVATE = key_path
 
-        domain_name = input("Enter the resolved domain name:")
+        Hysteria.DOMAIN_NAME = input("Enter the resolved domain name:")
         try:
-            validate_domain(domain_name)
+            validate_domain(Hysteria.DOMAIN_NAME)
         except TypeError:
             print(Color.Red + 'Invalid Domain Name !\n' + Color.Reset)
             return certificate()
 
-        insecure = "false"
-        print(Color.Blue + "Resolved domain name: {} ".format(domain_name) + Color.Reset)
+        Hysteria.INSECURE = "false"
+        print(Color.Blue + "Resolved domain name: {} ".format(Hysteria.DOMAIN_NAME) + Color.Reset)
 
 def port_hopping():
     global firstudpport , endudpport
@@ -341,14 +359,13 @@ def port_hopping():
           return port_hopping()
 
     subprocess.call(["iptables", "-t", "nat", "-A", "PREROUTING",
-     "-p", "udp", "--dport", str(firstudpport) + ":" + str(endudpport), "-j", "DNAT", "--to-destination", ":" + str(user_port)])
+     "-p", "udp", "--dport", str(firstudpport) + ":" + str(endudpport), "-j", "DNAT", "--to-destination", ":" + str(Hysteria.PORT)])
     subprocess.call(["ip6tables", "-t", "nat", "-A", "PREROUTING",
-     "-p", "udp", "--dport", str(firstudpport) + ":" + str(endudpport), "-j", "DNAT", "--to-destination", ":" + str(user_port)])
-    # subprocess.call(["netfilter-persistent", "save"])
+     "-p", "udp", "--dport", str(firstudpport) + ":" + str(endudpport), "-j", "DNAT", "--to-destination", ":" + str(Hysteria.PORT)])
+    subprocess.call(["netfilter-persistent", "save"])
     print("\nConfirmed range of forwarded ports: " + str(firstudpport) + " to " + str(endudpport) + "\n")
 
 def protocol():
-    global hysteria_protocol
     user_input = ''
 
     input_message = (Color.Green + "Select transport protocol for hysteria:\n" + Color.Reset)
@@ -368,16 +385,16 @@ def protocol():
     select = options[int(user_input) - 1]
 
     if select == options[0] :
-        hysteria_protocol = "udp"
+        Hysteria.PROTOCOL = "udp"
         port_hopping()
 
     elif select == options[1] :
-        hysteria_protocol = "wechat-video"
+        Hysteria.PROTOCOL = "wechat-video"
 
     elif select == options[2] :
-        hysteria_protocol = "faketcp"
+        Hysteria.PROTOCOL = "faketcp"
 
-    print(Color.Blue + "Transport Protocol : {}".format(hysteria_protocol) + Color.Reset)
+    print(Color.Blue + "Transport Protocol : {}".format(Hysteria.PROTOCOL) + Color.Reset)
 
 
 def hysteria_template():
@@ -405,7 +422,7 @@ services:
         txt.close()
         
 
-def generate_password():
+def generate_password() -> str:
     # Get current timestamp in nanoseconds
     timestamp = time.time_ns()
 
@@ -418,54 +435,50 @@ def random_port(min : int = 2000 ,max : int = MAX_PORT) -> int:
     return random.randint(min,max)
 
 def port():
-    global user_port
-
     try:
-        user_port = input("Set hysteria port [1-65535] (Press Enter for a random port between 2000-65535): ")
-        if len(user_port) == 0:
-                user_port = random_port()
+        Hysteria.PORT = input("Set hysteria port [1-65535] (Press Enter for a random port between 2000-65535): ")
+        if len(Hysteria.PORT) == 0:
+                Hysteria.PORT = random_port()
         
-        user_port = int(user_port)
+        Hysteria.PORT = int(Hysteria.PORT)
 
-        if user_port < MIN_PORT :
+        if Hysteria.PORT < MIN_PORT :
             print(Color.Red + "PORT Can't be below 0" + Color.Reset)
             return port()
         
-        if user_port > MAX_PORT :
+        if Hysteria.PORT > MAX_PORT :
             print(Color.Red + "PORT can't be more than" + str(MAX_PORT) + Color.Reset)
             return port()
 
-        if port_is_use(user_port):
+        if port_is_use(Hysteria.PORT):
             print(Color.Red + 'PORT is already being used' + Color.Reset)
             return port()
 
-
-        print(Color.Blue + "Hysteria PORT : " + str(user_port) + Color.Reset)
+        print(Color.Blue + "Hysteria PORT : " + str(Hysteria.PORT) + Color.Reset)
 
     except ValueError:
         print(Color.Red + "PORT must be a integer value" + Color.Reset)
         return port()
 
 def password():
-    global user_password
 
-    user_password = input("Set the hysteria authentication password, Press enter for a random password : ")
-    if user_password == "":
-        user_password = generate_password()
-    elif len(user_password) < 6 :
+    Hysteria.PASSWORD = input("Set the hysteria authentication password, Press enter for a random password : ")
+    if Hysteria.PASSWORD == "":
+        Hysteria.PASSWORD = generate_password()
+    elif len(Hysteria.PASSWORD) < 6 :
         print(Color.Yellow + "\nPassword must be more than 6 characters! Please re-enter" + Color.Reset)
         return password()
 
     print(Color.Blue + "Authentication password confirmed: {}\n"\
-    .format(Color.Yellow + user_password + Color.Reset) + Color.Reset)
+    .format(Color.Yellow + Hysteria.PASSWORD + Color.Reset) + Color.Reset)
 
 def hysteria_config():
 
-    config_port = user_port
-    if hysteria_protocol == "udp":
-        config_port = "{},{}-{}".format(user_port,firstudpport,endudpport)
+    config_port = Hysteria.PORT
+    if Hysteria.PROTOCOL == "udp":
+        config_port = "{},{}-{}".format(Hysteria.PORT,firstudpport,endudpport)
     else :
-        config_port = user_port
+        config_port = Hysteria.PORT
 
     # IPv4 
     ref = 46
@@ -485,7 +498,12 @@ def hysteria_config():
     "alpn": "h3",
     "cert": "/etc/hysteria/%s",
     "key": "/etc/hysteria/%s"
-    }""" % (config_port,hysteria_protocol,ref,user_password,cert,private)
+    }""" % (config_port,
+    Hysteria.PROTOCOL,
+    ref,
+    Hysteria.PASSWORD,
+    Hysteria.CERT,
+    Hysteria.PRIVATE)
     
     with open(config_name,'w') as config :
         config.write(json.dumps(json.loads(data),indent=2))
@@ -516,7 +534,12 @@ def client_config():
 "retry_interval": 3,
 "fast_open": true,
 "hop_interval": 60
-}""" % (ServerIP,user_port,hysteria_protocol,user_password,domain_name,insecure)
+}""" % (ServerIP,
+    Hysteria.PORT,
+    Hysteria.PROTOCOL,
+    Hysteria.PASSWORD,
+    Hysteria.DOMAIN_NAME,
+    Hysteria.INSECURE)
 
     with open(config_name,'w') as clientconfig :
         clientconfig.write(json.dumps(json.loads(data),indent=2))
@@ -534,7 +557,14 @@ def client_config():
 
 def hysteria_url(linkname):
     url = "hysteria://{}:{}?protocol={}&auth={}&peer={}&insecure={}&upmbps=10&downmbps=50&alpn=h3#{}"\
-    .format(ServerIP,user_port,hysteria_protocol,user_password,domain_name,insecure,linkname)
+    .format(
+    ServerIP,
+    Hysteria.PORT,
+    Hysteria.PROTOCOL,
+    Hysteria.PASSWORD,
+    Hysteria.DOMAIN_NAME,
+    Hysteria.INSECURE,
+    linkname)
 
     return(url)
 
