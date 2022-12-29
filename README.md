@@ -126,4 +126,4 @@ Licensed under the [GPL-3][license] license.
 [telegram-shield]: https://img.shields.io/badge/Telegram-blue.svg?style=flat&logo=telegram
 [telegram-url]: https://t.me/ReiNotes
 [license]: LICENSE
-[version]: https://img.shields.io/badge/Version-0.3.4-blue
+[version]: https://img.shields.io/badge/Version-0.3.6-blue
