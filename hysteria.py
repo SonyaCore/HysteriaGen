@@ -62,7 +62,7 @@ class Hysteria:
 
     ## Domain
     DOMAIN_NAME: str = None
-    INSECURE: str | bool = None
+    INSECURE: str = None
     ## Certificate
     CERT: str = None
     PRIVATE: str = None
@@ -196,7 +196,7 @@ def validate_domain(domain):
         raise TypeError
 
 
-class Docker:
+class Docker():
     """
     main docker module.
     this module check for docker status & docker binary file in /usr/bin/docker
