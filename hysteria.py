@@ -364,7 +364,7 @@ def port_hopping():
      "-p", "udp", "--dport", str(firstudpport) + ":" + str(endudpport), "-j", "DNAT", "--to-destination", ":" + str(Hysteria.PORT)])
     subprocess.call(["ip6tables", "-t", "nat", "-A", "PREROUTING",
      "-p", "udp", "--dport", str(firstudpport) + ":" + str(endudpport), "-j", "DNAT", "--to-destination", ":" + str(Hysteria.PORT)])
-    subprocess.call(["netfilter-persistent", "save"])
+    # subprocess.call(["netfilter-persistent", "save"])
     print("\nConfirmed range of forwarded ports: " + str(firstudpport) + " to " + str(endudpport) + "\n")
 
 def protocol():
