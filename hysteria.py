@@ -24,7 +24,7 @@ from urllib.error import HTTPError, URLError
 
 # Name
 NAME = "HysteriaGen"
-VERSION = "0.3.6"
+VERSION = "0.3.7"
 
 # Docker Compose Version
 DOCKERCOMPOSEVERSION = "2.14.2"
@@ -196,9 +196,13 @@ def validate_domain(domain):
         raise TypeError
 
 
-class Docker():
+class ImageNotFound(Exception):
+    pass
+
+
+class Docker:
     """
-    main docker module.
+    main docker module with subprocess.
     this module check for docker status & docker binary file in /usr/bin/docker
     if docker is not in the path it will install docker with the official script.
     then it checks the docker-compose path if the condition is True docker-compose.yml will be used for running hysteria.
@@ -269,6 +273,31 @@ class Docker():
         subprocess.run(
             f"docker-compose -f {self.dockercompose} up -d", shell=True, check=True
         )
+
+    def remove_docker_images(self, name: str):
+        lists = self.list_docker_image_names(name)
+
+        for remove in lists:
+            subprocess.run(
+                ["docker", "kill", remove], stdout=subprocess.PIPE
+            ).stdout.decode()
+            subprocess.run(
+                ["docker", "rm", remove], stdout=subprocess.PIPE
+            ).stdout.decode()
+
+    def list_docker_image_names(self, name: str):
+        output = subprocess.run(
+            ["docker", "ps", "-a"], stdout=subprocess.PIPE
+        ).stdout.decode()
+
+        lines = output.split("\n")
+
+        filtered_lines = [line.split(" ")[0] for line in lines if name in line]
+
+        if len(filtered_lines) == 0:
+            raise ImageNotFound
+        else:
+            return filtered_lines
 
     def reset_docker_compose(self):
         subprocess.run(f"docker-compose restart", shell=True, check=True)
@@ -777,6 +806,8 @@ def server_information() -> str:
 
 def menu_option() -> str:
     print("[1] Deploying Hysteria using docker-compose")
+    print("[2] Removing all Hystoria images")
+    print(Color.Cyan + "=" * 50 + Color.Reset)
     print("[0] Exit the program")
 
 
@@ -811,6 +842,26 @@ def menu():
             print(Color.Yellow + "QRCode : " + Color.Reset)
             print(qrcode(hysteria_url("hysteria")))
             break
+
+        elif option == 2:
+            dockerlist = Docker()
+
+            try:
+                names = dockerlist.list_docker_image_names("hysteria")
+                for name in names:
+                    print(name)
+
+                confirm = input(Color.Red + "Delete these images? : " + Color.Reset)
+
+                if confirm.lower() in ["y", "yes"]:
+                    dockerlist.remove_docker_images("hysteria")
+                    print(Color.Green + "Remove Complete" + Color.Reset)
+                else:
+                    pass
+            except ImageNotFound:
+                print(Color.Yellow + "No Hysteria images found ! " + Color.Reset)
+                pass
+
         else:
             print(Color.Red + "Invalid Option." + Color.Reset)
 
