@@ -4,7 +4,7 @@
 # ------------------------------------------
 #   Author    : SonyaCore
 # 	Github    : https://github.com/SonyaCore
-#   Licence   : https://www.gnu.org/licenses/gpl-3.0.en.html
+#   License   : https://www.gnu.org/licenses/gpl-3.0.en.html
 
 import os
 import sys
@@ -24,7 +24,7 @@ from urllib.error import HTTPError, URLError
 
 # Name
 NAME = "HysteriaGen"
-VERSION = "0.3.7"
+VERSION = "0.3.8"
 
 # Docker Compose Version
 DOCKERCOMPOSEVERSION = "2.14.2"
@@ -268,6 +268,7 @@ class Docker:
                 shell=True,
                 check=True,
             )
+            self.run_docker_compose()
 
     def run_docker_compose(self):
         subprocess.run(
