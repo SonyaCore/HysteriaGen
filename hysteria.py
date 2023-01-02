@@ -37,6 +37,7 @@ SELFSIGEND_KEY = "private.key"
 MIN_PORT = 0
 MAX_PORT = 65535
 
+
 #####################################
 class Color:
     """
@@ -580,7 +581,6 @@ def port():
             return port()
 
         print(Color.Blue + "Hysteria PORT : " + str(Hysteria.PORT) + Color.Reset)
-
     except ValueError:
         print(Color.Red + "PORT must be a integer value" + Color.Reset)
         return port()
@@ -830,6 +830,7 @@ def menu():
             print(Color.Green + "Deploying Hysteria " + Color.Reset)
             certificate()
             port()
+            firewall()
             protocol()
             password()
             hysteria_config()
@@ -868,6 +869,42 @@ def menu():
 
         option = shell()
 
+#####################################
+
+
+def firewall():
+    """
+    add configuration port to firewall.
+    by default, it checks if the "ufw" or "firewalld" exists and adds the rule to the firewall
+    else iptables firewall rule will be added
+    """
+    try:
+        if os.path.exists("/usr/sbin/ufw"):
+            service = "ufw"
+            subprocess.run(f"ufw allow {Hysteria.PORT}", check=True, shell=True)
+        elif os.path.exists("/usr/sbin/firewalld"):
+            service = "firewalld"
+            subprocess.run(
+                f"firewall-cmd --permanent --add-port={Hysteria.PORT}/tcp",
+                shell=True,
+                check=True,
+            )
+        else:
+            service = "iptables"
+            subprocess.run(
+                f"iptables -t filter -A INPUT -p tcp --dport {Hysteria.PORT} -j ACCEPT",
+                shell=True,
+                check=True,
+            )
+            subprocess.run(
+                f"iptables -t filter -A OUTPUT -p tcp --dport {Hysteria.PORT} -j ACCEPT",
+                shell=True,
+                check=True,
+            )
+        print(Color.Green + "Added " + str(Hysteria.PORT) + " " + "to " + service + Color.Reset)
+        print("-----------------")
+    except subprocess.CalledProcessError as e:
+        sys.exit(Color.Reset + str(e) + Color.Reset)
 
 if __name__ == "__main__":
     menu()
