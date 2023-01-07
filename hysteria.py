@@ -24,7 +24,7 @@ from urllib.error import HTTPError, URLError
 
 # Name
 NAME = "HysteriaGen"
-VERSION = "0.3.8"
+VERSION = "0.4.0"
 
 # Docker Compose Version
 DOCKERCOMPOSEVERSION = "2.14.2"
@@ -34,9 +34,12 @@ DOCKERCOMPOSE = "docker-compose.yml"
 SELFSIGEND_CERT = "cert.crt"
 SELFSIGEND_KEY = "private.key"
 
-MIN_PORT = 0
+MIN_PORT = 1
 MAX_PORT = 65535
 
+
+## Global Config
+sys.tracebacklimit = 0
 
 #####################################
 class Color:
@@ -64,6 +67,7 @@ class Hysteria:
     ## Domain
     DOMAIN_NAME: str = None
     INSECURE: str = None
+    CONFIG: bool = None
     ## Certificate
     CERT: str = None
     PRIVATE: str = None
@@ -126,6 +130,66 @@ def get_distro() -> str:
     except FileNotFoundError:
         sys.exit("OS not detected make sure to use a linux based OS")
 
+def save_config(config : str, data : str) -> None:
+    with open(config, "w") as file:
+        json.dump(data, file, indent=2)
+
+        Docker().reset_docker_compose()
+
+def read_config(config: str) -> None:
+    with open(config, "r") as configfile:
+        return json.loads(configfile.read())
+
+def load_config():
+    global config
+    try:
+        config = sys.argv[1]
+    except IndexError:
+        config = "hysteria.json"
+    try:
+        with open(config, "r") as configfile:
+            configfile.read()
+            print(Color.Green + "Config : " + Color.Reset + config)
+            Hysteria.CONFIG = True
+    except FileNotFoundError:
+        print(Color.Green + "Config : " + Color.Reset + 'NOT EXIST')
+        Hysteria.CONFIG = False
+
+def read_port(config):
+    data = read_config(config)
+    port = data["listen"][1:]
+    return port
+    
+
+def read_password(config):
+    data = read_config(config)
+
+    try :
+        if data["obfs"]:
+            password = data["obfs"]
+    except KeyError:
+        pass
+    try :
+        if data["auth"]:
+            password = data["auth"]["config"]["password"]
+
+    except KeyError:
+        pass
+
+    try :
+        return password
+
+    except UnboundLocalError:
+        raise PasswordNotFound(Color.Red + "Invalid config , Password not found !" + Color.Reset)
+
+
+
+def validate_port(port):
+    if port < MIN_PORT or port > MAX_PORT:
+        print("Port number must be between %d and %d." % (MIN_PORT, MAX_PORT))
+        raise TypeError
+    else:
+        pass
 
 def install_dependency():
     os = get_distro()
@@ -199,7 +263,66 @@ def validate_domain(domain):
 
 class ImageNotFound(Exception):
     pass
+class PasswordNotFound(Exception):
+    pass
 
+def change_hysteria_port():
+    try :
+        port = int(input('Enter a PORT : '))
+    except ValueError:
+        print(Color.Red + "PORT must be a integer value" + Color.Reset)
+        return
+    try:
+        validate_port(port)
+    except TypeError:
+        return 
+
+    data = read_config(config)
+    configport = read_port(config)
+    data["listen"] = port
+
+    if port_is_use(port):
+        print("PORT {} is being used. try another".format(Color.Green + str(port) + Color.Reset))
+        return 
+    else:
+        confirm = input("Change PORT {}{}{} to {}{}{} ? [y/n] ".format(
+            Color.Yellow , configport , Color.Reset , Color.Green, port , Color.Reset))
+        if confirm.lower() in ["y", "yes"]:
+
+            data["listen"] = ":"+ str(port)
+            save_config(config, data)
+
+            print("Hysteria PORT changed to {}{}".format(Color.Yellow , port))
+        else:
+            pass
+
+def change_hysteria_password():
+    password = str(input('Enter a Password or press enter for random : '))
+    if len(password) == 0 :
+        password = random_password()
+
+    data = read_config(config)
+    configpass = read_password(config)
+    try :
+        if data["obfs"]:
+            data["obfs"] = password
+    except KeyError:
+        pass
+
+    try :
+        if data["auth"]:
+            data["auth"]["config"]["password"] = password
+    except KeyError:
+        pass
+
+    confirm = input("Change PASSWORD {}{}{} to {}{}{} ? [y/n] ".format(
+        Color.Yellow , configpass , Color.Reset , Color.Green, password , Color.Reset))
+    if confirm.lower() in ["y", "yes"]:
+        save_config(config, data)
+
+        print("Hysteria PASSWORD changed to {}{}".format(Color.Yellow , password))
+    else:
+        pass
 
 class Docker:
     """
@@ -803,14 +926,23 @@ def server_information() -> str:
     print(Color.Green + "Distro : " + Color.Reset + get_distro())
     print(Color.Green + "Kernel : " + Color.Reset + kernel_check())
     print(Color.Green + "IP : " + Color.Reset + ServerIP)
-
+    load_config()
 
 def menu_option() -> str:
+    print(Color.Yellow + 'Deployment : ' + Color.Reset)
     print("[1] Deploying Hysteria using docker-compose")
     print("[2] Removing all Hystoria images")
     print(Color.Cyan + "=" * 50 + Color.Reset)
+    print(Color.Yellow + 'Configuration : ' + Color.Reset)
+    print("[3] Change PORT")
+    print("[4] Change PASSWORD")
+    print(Color.Cyan + "=" * 50 + Color.Reset)
+
     print("[0] Exit the program")
 
+
+def confignotfound():
+    print(Color.Red + "Configuration File not found !" + Color.Reset)
 
 def menu():
     banner()
@@ -824,7 +956,6 @@ def menu():
     print(Color.Green + "=" * 100 + Color.Reset)
 
     option = shell()
-
     while option != 0:
         if option == 1:
             print(Color.Green + "Deploying Hysteria " + Color.Reset)
@@ -864,10 +995,24 @@ def menu():
                 print(Color.Yellow + "No Hysteria images found ! " + Color.Reset)
                 pass
 
+        elif option == 3:
+            if Hysteria.CONFIG == True :
+                print(Color.Green + "Current PORT : " + Color.Reset + read_port(config))
+                change_hysteria_port()
+            else :
+                confignotfound()
+        elif option == 4:
+            if Hysteria.CONFIG == True :
+                print(Color.Green + "Current PASSWORD : " + Color.Reset + read_password(config))
+                change_hysteria_password()
+            else :
+                confignotfound()
+
         else:
             print(Color.Red + "Invalid Option." + Color.Reset)
 
         option = shell()
+
 
 #####################################
 
@@ -901,10 +1046,19 @@ def firewall():
                 shell=True,
                 check=True,
             )
-        print(Color.Green + "Added " + str(Hysteria.PORT) + " " + "to " + service + Color.Reset)
+        print(
+            Color.Green
+            + "Added "
+            + str(Hysteria.PORT)
+            + " "
+            + "to "
+            + service
+            + Color.Reset
+        )
         print("-----------------")
     except subprocess.CalledProcessError as e:
         sys.exit(Color.Reset + str(e) + Color.Reset)
+
 
 if __name__ == "__main__":
     menu()
